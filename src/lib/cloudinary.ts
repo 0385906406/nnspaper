@@ -39,6 +39,13 @@ export function uploadBuffer(
     publicId?: string;
     /** Ghi đè file cùng public_id và xoá bản cũ trên CDN (dùng cho logo/favicon). */
     overwrite?: boolean;
+    /**
+     * Giữ nguyên file, không áp transformation nào.
+     *
+     * Dùng cho sprite sheet nhân vật: q_auto làm nhoè các nhân vật vẽ kiểu pixel,
+     * và sprite phải giữ đúng lưới 3x3 nên không được để Cloudinary can thiệp.
+     */
+    raw?: boolean;
   } = {}
 ): Promise<UploadApiResponse> {
   assertCloudinaryConfigured();
@@ -51,7 +58,7 @@ export function uploadBuffer(
         public_id: options.publicId,
         ...(options.overwrite ? { overwrite: true, invalidate: true } : {}),
         // Tự nén và chọn định dạng tốt nhất cho từng trình duyệt
-        transformation: [{ quality: "auto", fetch_format: "auto" }],
+        ...(options.raw ? {} : { transformation: [{ quality: "auto", fetch_format: "auto" }] }),
       },
       (error, result) => {
         if (error) return reject(error);

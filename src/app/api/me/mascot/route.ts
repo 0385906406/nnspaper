@@ -1,5 +1,5 @@
 import { getCurrentUser } from "@/lib/admin";
-import { isMascotChoice } from "@/lib/mascots";
+import { isKnownMascot } from "@/lib/custom-mascots";
 
 export const runtime = "nodejs";
 
@@ -11,8 +11,10 @@ export async function PUT(request: Request) {
   }
 
   const body = (await request.json().catch(() => null)) as { mascot?: unknown } | null;
-  const mascot = body?.mascot;
-  if (!isMascotChoice(mascot)) {
+  const mascot = typeof body?.mascot === "string" ? body.mascot : "";
+  // Tra cả DB: nhân vật tuỳ chỉnh không có trong danh sách khai cứng, còn slug
+  // bịa ra thì phải bị chặn ở đây chứ không được lưu vào tài khoản
+  if (!(await isKnownMascot(mascot))) {
     return Response.json({ error: "Nhân vật không hợp lệ" }, { status: 400 });
   }
 

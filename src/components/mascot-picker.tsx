@@ -34,6 +34,7 @@ export function useSaveMascot() {
         toast.error(data.error ?? "Không lưu được nhân vật.");
         return false;
       }
+      // mascotName chỉ biết bộ gốc; nhân vật tuỳ chỉnh rơi về "Nhân vật", chấp nhận được
       toast.success(slug === NO_MASCOT ? "Đã ẩn nhân vật" : `Đã chọn ${mascotName(slug)}`);
       router.refresh();
       return true;
@@ -48,6 +49,23 @@ export function useSaveMascot() {
   return { save, saving };
 }
 
+/** Một nhân vật trong danh sách do /api/mascots trả về. */
+type MascotEntry = {
+  slug: string;
+  name: string;
+  group: MascotGroup;
+  directions: string;
+  reactions: string;
+  custom: boolean;
+};
+
+/** Bộ gốc dùng ngay khi chưa tải xong, để lưới không nhấp nháy lúc mở trang. */
+const BUILT_IN_ENTRIES: MascotEntry[] = MASCOTS.map((m) => ({
+  ...m,
+  ...mascotSheets(m.slug),
+  custom: false,
+}));
+
 /** Lưới chọn nhân vật, chia tab theo nhóm, có xem trước bản động. */
 export function MascotGrid({
   value,
@@ -58,9 +76,24 @@ export function MascotGrid({
   onPick: (slug: string) => void;
   saving: string | null;
 }) {
-  const initialGroup = MASCOTS.find((m) => m.slug === value)?.group ?? "animal";
+  const [entries, setEntries] = useState<MascotEntry[]>(BUILT_IN_ENTRIES);
+  const initialGroup = BUILT_IN_ENTRIES.find((m) => m.slug === value)?.group ?? "animal";
   const [group, setGroup] = useState<MascotGroup>(initialGroup);
   const hidden = value === NO_MASCOT;
+
+  // Nhân vật admin tự thêm nằm trong DB nên phải hỏi server; bộ gốc hiển thị
+  // ngay từ đầu nên chờ một nhịp ở đây không làm lưới trống.
+  useEffect(() => {
+    fetch("/api/mascots")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (Array.isArray(data?.mascots) && data.mascots.length) setEntries(data.mascots);
+      })
+      .catch(() => {});
+  }, []);
+
+  const current = entries.find((m) => m.slug === value);
+  const nameOf = (slug: string) => entries.find((m) => m.slug === slug)?.name ?? mascotName(slug);
 
   return (
     <div className="space-y-4">
@@ -70,12 +103,18 @@ export function MascotGrid({
           {hidden ? (
             <MascotAvatar mascot={DEFAULT_MASCOT} ring={false} className="h-20 w-20 opacity-50" />
           ) : (
-            <Mascot key={value} {...mascotSheets(value)} size={88} label={mascotName(value)} />
+            <Mascot
+              key={value}
+              directions={current?.directions ?? mascotSheets(value).directions}
+              reactions={current?.reactions ?? mascotSheets(value).reactions}
+              size={88}
+              label={nameOf(value)}
+            />
           )}
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-foreground">
-            {hidden ? "Đang ẩn ở thanh bên" : mascotName(value)}
+            {hidden ? "Đang ẩn ở thanh bên" : nameOf(value)}
           </p>
           <p className="mt-0.5 text-xs text-muted">
             {hidden
@@ -113,7 +152,7 @@ export function MascotGrid({
       </div>
 
       <ul role="tabpanel" className="grid grid-cols-3 gap-x-2 gap-y-3 sm:grid-cols-4 md:grid-cols-5">
-        {MASCOTS.filter((m) => m.group === group).map((m) => {
+        {entries.filter((m) => m.group === group).map((m) => {
           const selected = m.slug === value;
           return (
             <li key={m.slug}>

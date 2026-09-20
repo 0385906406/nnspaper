@@ -1,5 +1,8 @@
 /**
- * Danh mục nhân vật (linh vật) người dùng có thể chọn — dùng chung server/client.
+ * Bộ nhân vật (linh vật) GỐC — dùng chung server/client.
+ *
+ * Admin thêm được nhân vật riêng qua /admin/mascots; những nhân vật đó nằm trong
+ * DB (model Mascot) và được hợp nhất vào danh sách ở lib/custom-mascots.
  *
  * Mỗi nhân vật là hai sprite sheet 3×3 trong public/mascots (gói page-mascot):
  * `<slug>-directions.webp` (9 hướng nhìn) và `<slug>-reactions.webp` (9 biểu cảm).
@@ -85,16 +88,44 @@ export const DEFAULT_MASCOT = "fox";
 /** Giá trị lưu khi người dùng muốn ẩn nhân vật. */
 export const NO_MASCOT = "none";
 
-const SLUGS = new Set(MASCOTS.map((m) => m.slug));
+const BUILTIN_SLUGS = new Set(MASCOTS.map((m) => m.slug));
 
+/** Kích thước sprite của bộ gốc — nhân vật tự thêm phải theo đúng khuôn này. */
+export const SHEET_SIZE = 432;
+export const SHEET_GRID = 3;
+export const FRAME_SIZE = SHEET_SIZE / SHEET_GRID;
+
+/** Slug an toàn để ghép vào đường dẫn: chữ thường, số và gạch nối. */
+export const MASCOT_SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+export function isBuiltInMascot(slug: string): boolean {
+  return BUILTIN_SLUGS.has(slug);
+}
+
+/**
+ * Chỉ nhận giá trị có dạng hợp lệ, KHÔNG khẳng định nhân vật có tồn tại.
+ *
+ * Nhân vật tuỳ chỉnh nằm trong DB nên phía client không thể biết danh sách đầy đủ
+ * một cách đồng bộ. Chốt kiểm tra thật nằm ở `isKnownMascot` trong custom-mascots
+ * (chạy trên server, có tra DB) — hàm này chỉ để lọc chuỗi rác trước khi ghép URL.
+ */
 export function isMascotChoice(value: unknown): value is string {
-  return typeof value === "string" && (value === NO_MASCOT || SLUGS.has(value));
+  return typeof value === "string" && (value === NO_MASCOT || MASCOT_SLUG_RE.test(value));
 }
 
 export function mascotSheets(slug: string) {
+  // Bộ gốc là file tĩnh trong public/. Nhân vật tuỳ chỉnh đi qua một route trung
+  // gian: nhờ vậy hàm này vẫn đồng bộ và chạy được ở client mà không cần tra DB,
+  // chỉ dựa vào việc slug có nằm trong bộ gốc hay không.
+  if (isBuiltInMascot(slug)) {
+    return {
+      directions: `/mascots/${slug}-directions.webp`,
+      reactions: `/mascots/${slug}-reactions.webp`,
+    };
+  }
   return {
-    directions: `/mascots/${slug}-directions.webp`,
-    reactions: `/mascots/${slug}-reactions.webp`,
+    directions: `/api/mascots/${slug}/directions`,
+    reactions: `/api/mascots/${slug}/reactions`,
   };
 }
 

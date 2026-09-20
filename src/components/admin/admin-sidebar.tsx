@@ -12,6 +12,7 @@ const MENU_ITEMS = [
   { label: "Hình nền", href: "/admin/wallpapers", icon: "🖼️" },
   { label: "Bình luận", href: "/admin/comments", icon: "💬" },
   { label: "Tìm kiếm", href: "/admin/search", icon: "🔎" },
+  { label: "Nhân vật", href: "/admin/mascots", icon: "🦊" },
   { label: "Vai trò", href: "/admin/roles", icon: "👤" },
   { label: "Cài đặt", href: "/admin/settings", icon: "⚙️" },
   { label: "Audit Log", href: "/admin/audit-logs", icon: "📋" },
