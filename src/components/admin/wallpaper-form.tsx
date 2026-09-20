@@ -454,9 +454,10 @@ export function WallpaperForm({ initial }: { initial?: WallpaperFormValues }) {
           value={values.media}
           accept={values.mediaType === "video" ? "video/*" : "image/*"}
           hint={
+            // Lấy trần từ chính hằng số dùng để kiểm tra, để text và luật không lệch nhau
             values.mediaType === "video"
-              ? "MP4 hoặc WEBM, tối đa 100MB. Kéo thả vào đây cũng được."
-              : "JPG, PNG hoặc WEBP, tối đa 15MB. Kéo thả vào đây cũng được."
+              ? `MP4 hoặc WEBM, tối đa ${limitFor(true).label}. Kéo thả vào đây cũng được.`
+              : `JPG, PNG hoặc WEBP, tối đa ${limitFor(false).label}. Kéo thả vào đây cũng được.`
           }
           onUploaded={(media, resolutionLabel) => {
             discard(values.media);

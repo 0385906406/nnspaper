@@ -6,7 +6,17 @@
  * và suy ra nhãn độ phân giải.
  */
 
-export const MAX_IMAGE = 15 * 1024 * 1024;
+/**
+ * Trần dung lượng, lấy đúng theo `media_limits` mà Cloudinary áp cho gói Free
+ * (đọc bằng `cloudinary.api.usage()`): ảnh 10MB, video 100MB.
+ *
+ * Phải khớp chứ không được đặt cao hơn: Cloudinary chặn ở phía họ, nên để 15MB
+ * như trước nghĩa là ảnh 10–15MB vẫn được tải lên hết rồi mới bị từ chối — admin
+ * chờ xong mới nhận lỗi khó hiểu thay vì bị chặn ngay từ đầu.
+ *
+ * Nâng gói thì sửa lại hai số này cho khớp `media_limits` của gói mới.
+ */
+export const MAX_IMAGE = 10 * 1024 * 1024;
 export const MAX_VIDEO = 100 * 1024 * 1024;
 
 /**
