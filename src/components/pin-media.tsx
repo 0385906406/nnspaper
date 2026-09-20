@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import type { WallpaperView } from "@/lib/wallpapers";
-import { coverOf } from "@/lib/cover";
+import { coverOf, videoSrc } from "@/lib/cover";
 import { ArrowLeftIcon, CloseIcon, ExpandIcon } from "@/components/icons";
 
 /** Ảnh/video chính của trang chi tiết: hiện nguyên tỉ lệ, có nút quay lại và xem toàn màn hình. */
@@ -30,7 +30,7 @@ export function PinMedia({ wallpaper, backHref }: { wallpaper: WallpaperView; ba
     wallpaper.mediaType === "video" ? (
       <video
         className="max-h-[calc(100dvh-140px)] w-full object-contain"
-        src={media.url}
+        src={videoSrc(media.url)}
         poster={coverOf(wallpaper).url}
         autoPlay
         loop
@@ -88,7 +88,7 @@ export function PinMedia({ wallpaper, backHref }: { wallpaper: WallpaperView; ba
             <CloseIcon className="h-5 w-5" />
           </button>
           {wallpaper.mediaType === "video" ? (
-            <video src={media.url} className="max-h-full max-w-full" autoPlay loop controls playsInline />
+            <video src={videoSrc(media.url)} className="max-h-full max-w-full" autoPlay loop controls playsInline />
           ) : (
             // Ảnh gốc Cloudinary có thể không nằm trong danh sách kích thước của next/image
             // eslint-disable-next-line @next/next/no-img-element

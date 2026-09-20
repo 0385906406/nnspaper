@@ -20,3 +20,18 @@ export function coverOf(wallpaper: Pick<WallpaperView, "mediaType" | "media" | "
   }
   return media;
 }
+
+/**
+ * URL phát video, có nén.
+ *
+ * Video không còn được nén lúc tải lên (làm upload chậm gấp 3.6 lần và kéo theo
+ * timeout), nên phải nén khi phát: `q_auto` để Cloudinary tự chọn mức nén, còn
+ * `vc_auto` để chọn codec hợp trình duyệt. Cloudinary chuyển mã ở lần gọi đầu
+ * rồi cache trên CDN, nên đây là chi phí một lần cho mỗi video.
+ */
+export function videoSrc(url: string): string {
+  if (!url.includes("res.cloudinary.com") || !url.includes("/video/upload/")) return url;
+  // Đã chèn transformation rồi thì thôi, tránh nối chồng khi hàm bị gọi hai lần
+  if (url.includes("/video/upload/q_auto")) return url;
+  return url.replace("/video/upload/", "/video/upload/q_auto,vc_auto/");
+}

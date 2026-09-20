@@ -74,3 +74,40 @@ export async function destroyAsset(
 }
 
 export { cloudinary };
+
+export type SignedUpload = {
+  cloudName: string;
+  apiKey: string;
+  resourceType: "image" | "video";
+  params: Record<string, string | number>;
+};
+
+/**
+ * Tham số đã ký để trình duyệt tự tải file lên Cloudinary.
+ *
+ * Chữ ký phải phủ đúng tập tham số mà client sẽ gửi kèm — thừa hoặc thiếu một
+ * khoá là Cloudinary trả "Invalid Signature" — nên việc dựng tham số và ký phải
+ * nằm chung một chỗ thay vì rải ở route.
+ */
+export function signUploadParams(isVideo: boolean): SignedUpload {
+  assertCloudinaryConfigured();
+
+  const params: Record<string, string | number> = {
+    folder: `${UPLOAD_FOLDER}/wallpapers`,
+    timestamp: Math.round(Date.now() / 1000),
+  };
+
+  // Ảnh nén ngay lúc tải lên (~1s). Video thì không: transformation lúc upload
+  // bắt Cloudinary transcode đồng bộ, đo được 4.7s -> 16.9s với file 9MB. Video
+  // được nén ở tầng URL lúc phát, xem videoSrc trong lib/cover.
+  if (!isVideo) params.transformation = "q_auto,f_auto";
+
+  params.signature = cloudinary.utils.api_sign_request(params, apiSecret as string);
+
+  return {
+    cloudName: cloudName as string,
+    apiKey: apiKey as string,
+    resourceType: isVideo ? "video" : "image",
+    params,
+  };
+}

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/admin/ui";
+import { limitFor, resolutionLabelFor } from "@/lib/upload-limits";
 
 type Media = {
   url: string;
@@ -64,6 +65,71 @@ function discardUpload(publicId: string, type: Media["resourceType"]) {
   fetch(`/api/admin/wallpapers/upload?${params}`, { method: "DELETE", keepalive: true }).catch(() => {});
 }
 
+/**
+ * Lấy thông báo lỗi từ response, chịu được cả khi thân phản hồi không phải JSON.
+ *
+ * Trước đây form gọi thẳng `res.json()` rồi mới xét `res.ok`, nên mỗi lần hạ tầng
+ * trả trang HTML (413 quá cỡ, 504 quá giờ) thì chính bước parse ném lỗi và rơi
+ * vào nhánh "Không kết nối được máy chủ" — lỗi thật bị giấu mất.
+ */
+async function errorFrom(res: Response, fallback: string): Promise<string> {
+  try {
+    const data = await res.json();
+    if (typeof data?.error === "string") return data.error;
+  } catch {
+    // Không parse được nghĩa là lỗi đến từ hạ tầng, mã trạng thái là manh mối duy nhất
+  }
+  return `${fallback} (HTTP ${res.status})`;
+}
+
+type CloudinaryResult = {
+  secure_url: string;
+  public_id: string;
+  width?: number;
+  height?: number;
+  format?: string;
+  bytes?: number;
+  duration?: number;
+};
+
+/**
+ * Đẩy file thẳng lên Cloudinary bằng XMLHttpRequest.
+ *
+ * Dùng XHR chứ không phải fetch vì chỉ XHR báo được tiến độ tải lên: video tới
+ * 100MB mà thanh trạng thái đứng im thì admin sẽ tưởng trang bị treo và bấm lại.
+ */
+function uploadToCloudinary(
+  url: string,
+  body: FormData,
+  onProgress: (percent: number) => void
+): Promise<CloudinaryResult> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+
+    xhr.onload = () => {
+      let data: CloudinaryResult & { error?: { message?: string } };
+      try {
+        data = JSON.parse(xhr.responseText);
+      } catch {
+        reject(new Error(`Cloudinary trả về phản hồi không đọc được (HTTP ${xhr.status}).`));
+        return;
+      }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+      else reject(new Error(data.error?.message ?? `Cloudinary từ chối file (HTTP ${xhr.status}).`));
+    };
+
+    xhr.onerror = () => reject(new Error("Mất kết nối tới Cloudinary khi đang tải lên."));
+    xhr.onabort = () => reject(new Error("Đã huỷ tải lên."));
+
+    xhr.send(body);
+  });
+}
+
 /** Ô chọn file: bấm chọn hoặc kéo thả, tải lên ngay rồi hiện xem trước. */
 function MediaPicker({
   kind,
@@ -82,28 +148,82 @@ function MediaPicker({
 }) {
   const ref = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
   const [dragging, setDragging] = useState(false);
 
+  /**
+   * File đi thẳng từ trình duyệt lên Cloudinary, không qua máy chủ Next.js.
+   *
+   * Đường cũ (POST /api/admin/wallpapers/upload) không sống được trên Vercel:
+   * serverless function chặn request body quá 4.5MB, nên mọi video đều hỏng
+   * dù route khai cho phép tới 100MB. Máy chủ giờ chỉ ký, không ôm file.
+   */
   async function upload(file: File) {
+    const isVideo = file.type.startsWith("video/");
+    const isImage = file.type.startsWith("image/");
+
+    // Kiểm tra ngay tại client: file không đi qua server nữa nên đây là chốt chặn
+    if (!isVideo && !isImage) {
+      setError("Chỉ nhận file ảnh hoặc video.");
+      return;
+    }
+    if (kind === "thumbnail" && !isImage) {
+      setError("Ảnh đại diện phải là file ảnh.");
+      return;
+    }
+    const limit = limitFor(isVideo);
+    if (file.size > limit.bytes) {
+      setError(`File quá lớn (${formatBytes(file.size)}). Tối đa ${limit.label}.`);
+      return;
+    }
+
     setUploading(true);
+    setProgress(0);
     setError("");
-    const body = new FormData();
-    body.append("kind", kind);
-    body.append("file", file);
 
     try {
-      const res = await fetch("/api/admin/wallpapers/upload", { method: "POST", body });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? "Tải lên thất bại.");
+      const signRes = await fetch("/api/admin/wallpapers/upload/sign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resourceType: isVideo ? "video" : "image" }),
+      });
+      if (!signRes.ok) {
+        setError(await errorFrom(signRes, "Không xin được chữ ký tải lên."));
         return;
       }
-      onUploaded(data.media, data.resolutionLabel);
-    } catch {
-      setError("Không kết nối được máy chủ.");
+      const { cloudName, apiKey, resourceType, params } = await signRes.json();
+
+      const body = new FormData();
+      body.append("file", file);
+      body.append("api_key", apiKey);
+      for (const [key, value] of Object.entries(params)) body.append(key, String(value));
+
+      const result = await uploadToCloudinary(
+        `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`,
+        body,
+        setProgress
+      );
+
+      onUploaded(
+        {
+          url: result.secure_url,
+          publicId: result.public_id,
+          resourceType,
+          width: result.width,
+          height: result.height,
+          format: result.format,
+          bytes: result.bytes,
+          duration: result.duration,
+          alt: "",
+        },
+        resolutionLabelFor(result.width, result.height)
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Tải lên thất bại.");
     } finally {
       setUploading(false);
+      setProgress(0);
       if (ref.current) ref.current.value = "";
     }
   }
@@ -166,7 +286,20 @@ function MediaPicker({
             )}
           </div>
 
-          {value ? (
+          {uploading ? (
+            // Video lớn tải mất hàng chục giây — không có tiến độ thì admin tưởng treo
+            <div className="mt-2">
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
+                <div
+                  className="h-full rounded-full bg-accent transition-[width] duration-150"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <p className="mt-1 text-xs text-muted">
+                {progress < 100 ? `Đang tải lên… ${progress}%` : "Cloudinary đang xử lý file…"}
+              </p>
+            </div>
+          ) : value ? (
             <p className="mt-2 text-xs text-muted">
               {value.width}×{value.height}
               {value.format ? ` · ${value.format.toUpperCase()}` : ""}

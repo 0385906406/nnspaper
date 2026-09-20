@@ -2,6 +2,7 @@ import "server-only";
 import { Category } from "@/models/Category";
 import { Wallpaper } from "@/models/Wallpaper";
 import { makeSlug } from "@/lib/wallpapers";
+import { resolutionLabelFor } from "@/lib/upload-limits";
 
 import mongoose from "mongoose";
 
@@ -20,20 +21,6 @@ export type MediaInput = {
   duration?: number;
   alt: string;
 };
-
-/**
- * Nhãn độ phân giải suy ra từ kích thước thật thay vì bắt admin tự gõ — gõ tay
- * thì mỗi người viết một kiểu ("4K", "4k UHD", "3840x2160") và badge trên card loạn.
- */
-export function resolutionLabelFor(width?: number, height?: number): string {
-  if (!width || !height) return "";
-  const long = Math.max(width, height);
-  if (long >= 3840) return "4K UHD";
-  if (long >= 2560) return "2K";
-  if (long >= 1920) return "FHD";
-  if (long >= 1280) return "HD";
-  return "";
-}
 
 function parseMedia(raw: unknown, fallbackAlt: string): MediaInput | null {
   if (!raw || typeof raw !== "object") return null;

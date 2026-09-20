@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import Image from "next/image";
+import { videoSrc } from "@/lib/cover";
 
 type Props = {
   imageUrl: string;
@@ -47,7 +48,7 @@ export function WallpaperCardMedia({ imageUrl, alt, sizes, priority, previewVide
       {previewVideoUrl ? (
         <video
           ref={videoRef}
-          src={previewVideoUrl}
+          src={videoSrc(previewVideoUrl)}
           poster={imageUrl}
           muted
           loop
