@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Button } from "@/components/admin/ui";
+import { Button, CommaList } from "@/components/admin/ui";
 import { BrandingCard } from "@/components/admin/branding-card";
 
 interface Setting {
@@ -168,14 +168,10 @@ export default function SettingsPage() {
       // Mảng chuỗi nhập bằng dấu phẩy dễ hơn nhiều so với gõ JSON thô
       const list = Array.isArray(value) ? value : [];
       return (
-        <textarea
-          value={list.join(", ")}
-          onChange={(e) =>
-            setValue(
-              setting.key,
-              e.target.value.split(",").map((s) => s.trim()).filter(Boolean)
-            )
-          }
+        <CommaList
+          multiline
+          value={list}
+          onChange={(next) => setValue(setting.key, next)}
           rows={3}
           placeholder="từ khoá 1, từ khoá 2, từ khoá 3"
           className={`${INPUT_CLASS} ${dirty ? "border-accent" : ""}`}
