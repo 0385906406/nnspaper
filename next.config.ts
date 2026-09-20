@@ -1,8 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Xuất bản dạng standalone để Docker image nhẹ (chỉ ~150MB thay vì cả node_modules)
-  output: "standalone",
+  // Standalone để Docker image nhẹ (~150MB thay vì cả node_modules). Phải tắt trên
+  // Vercel: builder của Vercel tự trace file và đọc .next/next-server.js.nft.json,
+  // còn standalone gom hết vào .next/standalone nên build fail với ENOENT.
+  output: process.env.VERCEL ? undefined : "standalone",
 
   // mongoose dùng API native của Node, không được bundle vào bundle server
   serverExternalPackages: ["mongoose"],
