@@ -363,3 +363,16 @@ body {
     animation: slide-in-right 0.3s ease-out;
   }
 }
+
+/* Safari trên iOS tự phóng to cả trang khi focus vào ô nhập có font-size dưới 16px,
+   rồi không thu lại — gặp ở ô tìm kiếm và ô bình luận. Ép đúng 16px ở khổ mobile để
+   chặn hành vi đó; từ 640px trở lên trả quyền quyết định cỡ chữ lại cho Tailwind.
+   Cố ý để ngoài @layer: rule ngoài layer mới đè được utility như text-sm.
+   Không dùng maximum-scale=1 trong viewport vì cách đó chặn luôn pinch-zoom. */
+@media (max-width: 639px) {
+  input:not([type="checkbox"], [type="radio"]),
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
