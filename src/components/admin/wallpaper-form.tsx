@@ -239,11 +239,27 @@ function putToR2(url: string, file: File, onProgress: (percent: number) => void)
       if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
     };
     xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) resolve();
-      else reject(new Error("R2 từ chối file (HTTP " + xhr.status + "). Kiểm tra cấu hình CORS của bucket."));
+      if (xhr.status >= 200 && xhr.status < 300) return resolve();
+      // R2 trả lỗi dạng XML, lấy <Message> ra vì nó nói thẳng vấn đề
+      const detail = xhr.responseText?.match(/<Message>([^<]+)<\/Message>/)?.[1];
+      console.error("[R2] PUT thất bại", xhr.status, xhr.responseText?.slice(0, 500));
+      reject(new Error(`R2 từ chối file (HTTP ${xhr.status})${detail ? `: ${detail}` : "."}`));
     };
-    xhr.onerror = () =>
-      reject(new Error("Không gửi được file lên R2. Bucket đã bật CORS cho tên miền này chưa?"));
+
+    xhr.onerror = () => {
+      // status 0 nghĩa là request không hoàn tất: trình duyệt chặn (CORS), mất mạng,
+      // hoặc kết nối bị ngắt giữa chừng. Không đoán bừa một nguyên nhân nữa — mở
+      // Network trong DevTools mới biết chính xác cái nào.
+      console.error("[R2] Không hoàn tất PUT. status =", xhr.status, "url =", url.split("?")[0]);
+      reject(
+        new Error(
+          `Không gửi được file lên R2 (status ${xhr.status}). Kết nối bị ngắt giữa chừng, ` +
+            "hoặc trình duyệt chặn request. Mở DevTools > Network để xem request PUT báo gì."
+        )
+      );
+    };
+
+    xhr.ontimeout = () => reject(new Error("Tải lên R2 quá lâu và đã bị huỷ."));
 
     xhr.send(file);
   });
