@@ -1,5 +1,6 @@
 import "server-only";
 import { Category } from "@/models/Category";
+import { Wallpaper } from "@/models/Wallpaper";
 import { makeSlug } from "@/lib/wallpapers";
 
 import mongoose from "mongoose";
@@ -89,10 +90,17 @@ export type NormalizedWallpaper = Record<string, unknown>;
  *
  * `partial` dùng cho PUT: chỉ xử lý những trường có mặt trong body, để sửa mỗi
  * tiêu đề không vô tình xoá sạch media và tags.
+ *
+ * `excludeId` và `currentSlug` cũng chỉ dùng cho PUT: bản ghi đang sửa không
+ * được tính là đụng slug với chính nó.
  */
 export async function normalizeWallpaperInput(
   body: Record<string, unknown>,
-  { partial = false }: { partial?: boolean } = {}
+  {
+    partial = false,
+    excludeId,
+    currentSlug,
+  }: { partial?: boolean; excludeId?: string; currentSlug?: string } = {}
 ): Promise<{ data: NormalizedWallpaper } | { error: string }> {
   const out: NormalizedWallpaper = {};
   const has = (key: string) => key in body;
@@ -106,9 +114,10 @@ export async function normalizeWallpaperInput(
 
   if (!partial || has("slug") || has("title")) {
     const raw = typeof body.slug === "string" ? body.slug.trim() : "";
-    const slug = makeSlug(raw || title);
-    if (!slug) return { error: "Không tạo được slug từ tiêu đề. Hãy nhập slug thủ công." };
-    out.slug = slug;
+    const base = makeSlug(raw || title);
+    if (!base) return { error: "Không tạo được slug từ tiêu đề. Hãy nhập slug thủ công." };
+    // Trùng tiêu đề là chuyện thường, nối mốc thời gian đăng thay vì báo lỗi 409
+    out.slug = await uniqueWallpaperSlug(base, { excludeId, currentSlug });
   }
 
   if (!partial || has("description")) {
@@ -205,4 +214,65 @@ export async function normalizeWallpaperInput(
   }
 
   return { data: out };
+}
+
+/**
+ * Các mốc thời gian dùng làm hậu tố slug, tính theo giờ Việt Nam.
+ *
+ * Phải ép múi giờ: server production chạy UTC, ảnh đăng lúc 1h sáng giờ VN sẽ
+ * nhận hậu tố của ngày hôm trước và admin tưởng hệ thống sai ngày.
+ */
+function timeSuffixes(now: Date): string[] {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+
+  const date = `${get("year")}${get("month")}${get("day")}`;
+  const hm = `${get("hour")}${get("minute")}`;
+  return [date, `${date}-${hm}`, `${date}-${hm}${get("second")}`];
+}
+
+/** Khớp phần hậu tố thời gian mà {@link uniqueWallpaperSlug} sinh ra. */
+const TIME_SUFFIX_RE = /-\d{8}(-\d{4}(\d{2})?)?$/;
+
+/**
+ * Slug cuối cùng cho hình nền: giữ nguyên slug gốc nếu còn trống, trùng thì nối
+ * thêm mốc thời gian đăng (ngày -> ngày+giờ phút -> ngày+giờ phút giây).
+ *
+ * Trùng tiêu đề là chuyện bình thường ("Hoa hồng đỏ" có thể có hàng chục bản),
+ * trước đây API trả 409 và bắt admin tự nghĩ slug khác.
+ *
+ * `currentSlug` (khi sửa) giữ nguyên slug đã phát hành nếu nó vốn sinh ra từ
+ * cùng tiêu đề này — không có nó thì mỗi lần bấm Lưu slug lại đổi theo ngày
+ * hiện tại, URL cũ chết và mọi liên kết đã chia sẻ hỏng theo.
+ */
+export async function uniqueWallpaperSlug(
+  base: string,
+  { excludeId, currentSlug }: { excludeId?: string; currentSlug?: string } = {}
+): Promise<string> {
+  if (currentSlug && (currentSlug === base || currentSlug.replace(TIME_SUFFIX_RE, "") === base)) {
+    return currentSlug;
+  }
+
+  const candidates = [base, ...timeSuffixes(new Date()).map((s) => `${base}-${s}`)];
+
+  const filter: Record<string, unknown> = { slug: { $in: candidates } };
+  if (excludeId) filter._id = { $ne: excludeId };
+  const taken = new Set(
+    (await Wallpaper.find(filter).select("slug").lean()).map((d) => (d as { slug: string }).slug)
+  );
+
+  const free = candidates.find((c) => !taken.has(c));
+  if (free) return free;
+
+  // Cùng tiêu đề, cùng giây, cùng máy: hiếm tới mức chỉ cần một mốc luôn khác
+  return `${base}-${Date.now().toString(36)}`;
 }

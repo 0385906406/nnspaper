@@ -62,16 +62,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     // partial: body cũ được đưa thẳng vào findByIdAndUpdate nên chỉ cần gửi thiếu
     // một trường là ghi đè rỗng; giờ chỉ những khoá thực sự có mặt mới được xử lý.
-    const result = await normalizeWallpaperInput(await req.json(), { partial: true });
+    // currentSlug giữ nguyên đường dẫn đã phát hành khi tiêu đề không đổi —
+    // thiếu nó thì mỗi lần lưu slug lại chạy theo ngày hiện tại và URL cũ chết.
+    const result = await normalizeWallpaperInput(await req.json(), {
+      partial: true,
+      excludeId: id,
+      currentSlug: current.slug,
+    });
     if ("error" in result) {
       return NextResponse.json({ error: result.error }, { status: 400 });
-    }
-
-    if (result.data.slug && result.data.slug !== current.slug) {
-      const clash = await Wallpaper.findOne({ slug: result.data.slug, _id: { $ne: id } });
-      if (clash) {
-        return NextResponse.json({ error: "Đường dẫn (slug) đã được dùng." }, { status: 409 });
-      }
     }
 
     // Đổi trạng thái mà không đổi gì khác thì giữ nguyên publishedAt đã có,

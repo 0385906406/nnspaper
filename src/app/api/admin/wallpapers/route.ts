@@ -99,14 +99,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
 
-    const slug = result.data.slug as string;
-    if (await Wallpaper.findOne({ slug })) {
-      return NextResponse.json(
-        { error: `Đã có hình nền dùng đường dẫn "${slug}". Hãy đổi tiêu đề hoặc slug.` },
-        { status: 409 }
-      );
-    }
-
+    // Slug trùng đã được normalizeWallpaperInput nối thêm mốc thời gian đăng,
+    // nên ở đây không còn phải chặn; E11000 bên dưới lo nốt trường hợp hai
+    // request cùng tiêu đề chạy song song và cùng giành một slug.
     const wallpaper = await Wallpaper.create(result.data);
 
     await logAudit(
