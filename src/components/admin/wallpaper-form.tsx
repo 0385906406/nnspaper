@@ -485,12 +485,12 @@ export function WallpaperForm({ initial }: { initial?: WallpaperFormValues }) {
 
         {values.mediaType === "video" && (
           <div className="mt-4">
-            <label className={LABEL}>Ảnh đại diện (bắt buộc với video)</label>
+            <label className={LABEL}>Ảnh đại diện (tuỳ chọn)</label>
             <MediaPicker
               kind="thumbnail"
               value={values.thumbnail}
               accept="image/*"
-              hint="Khung hình đại diện hiển thị ở danh sách, để card không phải tải cả video."
+              hint="Để trống thì tự lấy khung hình đầu của video. Chỉ cần tải ảnh lên nếu muốn chọn khung khác."
               onUploaded={(media) => {
                 discard(values.thumbnail);
                 track(media);

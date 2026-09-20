@@ -151,11 +151,9 @@ export async function normalizeWallpaperInput(
     out.thumbnail = parseMedia(body.thumbnail, title);
   }
 
-  // Card video cần poster, không có thì danh sách phải tải cả video chỉ để hiện khung hình đầu
-  const finalMediaType = out.mediaType ?? body.mediaType;
-  if (finalMediaType === "video" && !partial && !out.thumbnail) {
-    return { error: "Video nền cần một ảnh đại diện (thumbnail)." };
-  }
+  // Thumbnail của video là tuỳ chọn: thiếu thì coverOf() nhờ Cloudinary cắt khung
+  // hình đầu (so_0) làm poster, nên card vẫn có ảnh tĩnh mà không phải tải cả
+  // video. Chỉ tải ảnh riêng khi muốn chọn khung hình khác khung đầu.
 
   if (has("resolutionLabel") && typeof body.resolutionLabel === "string") {
     out.resolutionLabel = body.resolutionLabel.trim();
