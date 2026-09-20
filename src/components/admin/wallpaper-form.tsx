@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, CommaList } from "@/components/admin/ui";
+import { Button, TagsInput } from "@/components/admin/ui";
 import { limitFor, resolutionLabelFor } from "@/lib/upload-limits";
 
 type Media = {
@@ -619,12 +619,13 @@ export function WallpaperForm({ initial }: { initial?: WallpaperFormValues }) {
 
         <div>
           <label className={LABEL} htmlFor="tags">
-            Thẻ (cách nhau bằng dấu phẩy)
+            Thẻ
           </label>
-          <CommaList
+          <TagsInput
             id="tags"
             value={values.tags}
             onChange={(tags) => set("tags", tags)}
+            max={20}
             placeholder="anime, genshin, furina"
             className={INPUT}
           />

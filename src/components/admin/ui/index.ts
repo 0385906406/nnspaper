@@ -4,7 +4,7 @@ export { Form, FormGroup, FormActions } from "./form";
 export { Card, CardTitle, CardDescription } from "./card";
 export { Select } from "./select";
 export { Textarea } from "./textarea";
-export { CommaList } from "./comma-list";
+export { TagsInput } from "./tags-input";
 export {
   Pagination,
   PAGE_SIZE_OPTIONS,
