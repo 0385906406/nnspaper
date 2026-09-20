@@ -1,5 +1,21 @@
 import type { NextConfig } from "next";
 
+/**
+ * Tên miền công khai của bucket R2, nếu có cấu hình.
+ *
+ * next/image ném lỗi runtime — không phải chỉ hiện ảnh lỗi — khi gặp hostname
+ * chưa khai trong remotePatterns. Video R2 bình thường luôn có poster nằm trên
+ * Cloudinary, nhưng nếu poster thiếu thì URL R2 sẽ rơi vào next/image và làm sập
+ * cả trang. Khai sẵn ở đây để trường hợp đó chỉ là một ảnh lỗi.
+ */
+const r2Host = (() => {
+  try {
+    return process.env.R2_PUBLIC_URL ? new URL(process.env.R2_PUBLIC_URL).hostname : null;
+  } catch {
+    return null;
+  }
+})();
+
 const nextConfig: NextConfig = {
   // Standalone để Docker image nhẹ (~150MB thay vì cả node_modules). Phải tắt trên
   // Vercel: builder của Vercel tự trace file và đọc .next/next-server.js.nft.json,
@@ -23,6 +39,7 @@ const nextConfig: NextConfig = {
         hostname: "res.cloudinary.com",
         pathname: "/**",
       },
+      ...(r2Host ? [{ protocol: "https" as const, hostname: r2Host, pathname: "/**" }] : []),
     ],
     // AVIF/WebP giảm dung lượng ảnh mạnh -> điểm Core Web Vitals (LCP) tốt hơn
     formats: ["image/avif", "image/webp"],

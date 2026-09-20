@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { hasPermission, logAudit } from "@/lib/admin";
 import { connectDB } from "@/lib/mongodb";
-import { destroyAsset, destroyUnusedAsset } from "@/lib/cloudinary-assets";
+import { destroyStoredAsset, destroyUnusedStoredAsset } from "@/lib/media-assets";
 import { normalizeWallpaperInput } from "@/lib/wallpaper-input";
 import { syncSearchText } from "@/lib/wallpapers";
 import {
@@ -98,7 +98,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       const keep = new Set([updated.media?.publicId, updated.thumbnail?.publicId].filter(Boolean));
       for (const old of [current.media, current.thumbnail]) {
         if (!old?.publicId || keep.has(old.publicId)) continue;
-        await destroyUnusedAsset(old.publicId, old.resourceType === "video" ? "video" : "image");
+        await destroyUnusedStoredAsset(old);
       }
     }
 
@@ -144,11 +144,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     // chiếu. Hỏng bước này cũng không nên làm hỏng việc xoá.
     for (const asset of [wallpaper.media, wallpaper.thumbnail]) {
       if (!asset?.publicId) continue;
-      try {
-        await destroyAsset(asset.publicId, asset.resourceType === "video" ? "video" : "image");
-      } catch (err) {
-        console.error("Không xoá được file trên Cloudinary:", asset.publicId, err);
-      }
+      await destroyStoredAsset(asset);
     }
 
     await logAudit(

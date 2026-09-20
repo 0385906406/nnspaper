@@ -20,6 +20,7 @@ export type MediaInput = {
   bytes?: number;
   duration?: number;
   alt: string;
+  provider: "cloudinary" | "r2";
 };
 
 function parseMedia(raw: unknown, fallbackAlt: string): MediaInput | null {
@@ -38,6 +39,7 @@ function parseMedia(raw: unknown, fallbackAlt: string): MediaInput | null {
     bytes: typeof m.bytes === "number" ? m.bytes : undefined,
     duration: typeof m.duration === "number" ? m.duration : undefined,
     alt: typeof m.alt === "string" && m.alt.trim() ? m.alt.trim() : fallbackAlt,
+    provider: m.provider === "r2" ? "r2" : "cloudinary",
   };
 }
 

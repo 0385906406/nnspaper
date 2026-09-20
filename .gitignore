@@ -32,6 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# .env.example la file mau, chi chua placeholder va huong dan - phai commit de
+# nguoi khac biet can nhung bien nao. Moi .env* khac van bi bo qua.
+!.env.example
 
 # vercel
 .vercel

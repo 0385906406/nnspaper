@@ -28,6 +28,8 @@ export type MediaView = {
   bytes?: number;
   duration?: number;
   alt: string;
+  /** Kho lưu file: Cloudinary cho ảnh/poster, R2 cho video lớn. */
+  provider: "cloudinary" | "r2";
 };
 
 export type WallpaperSeo = {
@@ -79,6 +81,7 @@ function toMediaView(media: WallpaperDoc["media"] | null | undefined): MediaView
     bytes: media.bytes ?? undefined,
     duration: media.duration ?? undefined,
     alt: media.alt ?? "",
+    provider: media.provider === "r2" ? "r2" : "cloudinary",
   };
 }
 

@@ -32,6 +32,7 @@ function pcMedia(seed: string): MediaView {
     format: "jpg",
     bytes: 3_200_000,
     alt: seed.replace(/-/g, " "),
+    provider: "cloudinary",
   };
 }
 
@@ -45,6 +46,7 @@ function phoneMedia(seed: string): MediaView {
     format: "jpg",
     bytes: 2_600_000,
     alt: seed.replace(/-/g, " "),
+    provider: "cloudinary",
   };
 }
 
@@ -147,6 +149,7 @@ const WALLPAPER_SOURCE: WallpaperSource[] = [
       duration: 10,
       bytes: 4_200_000,
       alt: "Video nền cổng Torii lúc hoàng hôn",
+      provider: "cloudinary",
     },
     thumbnail: pcMedia("torii-gate-thumb"),
   },

@@ -15,6 +15,7 @@ type Media = {
   bytes?: number;
   duration?: number;
   alt: string;
+  provider: "cloudinary" | "r2";
 };
 
 export type WallpaperFormValues = {
@@ -60,8 +61,8 @@ function formatBytes(n?: number) {
 }
 
 /** Gửi yêu cầu xoá file chưa lưu; keepalive để vẫn gửi được khi đang rời trang. */
-function discardUpload(publicId: string, type: Media["resourceType"]) {
-  const params = new URLSearchParams({ publicId, type });
+function discardUpload(publicId: string, type: Media["resourceType"], provider: Media["provider"]) {
+  const params = new URLSearchParams({ publicId, type, provider });
   fetch(`/api/admin/wallpapers/upload?${params}`, { method: "DELETE", keepalive: true }).catch(() => {});
 }
 
@@ -130,12 +131,131 @@ function uploadToCloudinary(
   });
 }
 
+/** Tải một file lên Cloudinary bằng chữ ký từ server, trả về media đã chuẩn hoá. */
+async function cloudinaryUpload(
+  file: Blob,
+  isVideo: boolean,
+  onProgress: (percent: number) => void
+): Promise<{ media: Media; resolutionLabel: string }> {
+  const signRes = await fetch("/api/admin/wallpapers/upload/sign", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ resourceType: isVideo ? "video" : "image" }),
+  });
+  if (!signRes.ok) throw new Error(await errorFrom(signRes, "Không xin được chữ ký tải lên."));
+
+  const { cloudName, apiKey, resourceType, params } = await signRes.json();
+
+  const body = new FormData();
+  body.append("file", file);
+  body.append("api_key", apiKey);
+  for (const [key, value] of Object.entries(params)) body.append(key, String(value));
+
+  const result = await uploadToCloudinary(
+    "https://api.cloudinary.com/v1_1/" + cloudName + "/" + resourceType + "/upload",
+    body,
+    onProgress
+  );
+
+  return {
+    media: {
+      url: result.secure_url,
+      publicId: result.public_id,
+      resourceType,
+      width: result.width,
+      height: result.height,
+      format: result.format,
+      bytes: result.bytes,
+      duration: result.duration,
+      alt: "",
+      provider: "cloudinary",
+    },
+    resolutionLabel: resolutionLabelFor(result.width, result.height),
+  };
+}
+
+type VideoProbe = { width: number; height: number; duration: number; poster: Blob | null };
+
+/**
+ * Đọc kích thước, thời lượng và cắt khung hình đầu của video ngay trong trình duyệt.
+ *
+ * Cần thiết vì R2 chỉ là kho chứa byte: khác Cloudinary, nó không trả về metadata
+ * và không cắt được poster. Không có poster thì card phải nhúng cả thẻ <video> chỉ
+ * để hiện một khung hình tĩnh, rất tốn băng thông của người xem.
+ */
+function probeVideo(file: File): Promise<VideoProbe> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = "auto";
+    video.src = url;
+
+    // Hỏng ở bước nào cũng không được chặn việc tải lên: thiếu metadata thì badge
+    // độ phân giải để trống, thiếu poster thì admin tự tải ảnh đại diện như cũ.
+    const done = (probe: VideoProbe) => {
+      URL.revokeObjectURL(url);
+      resolve(probe);
+    };
+
+    video.onerror = () => done({ width: 0, height: 0, duration: 0, poster: null });
+
+    video.onloadeddata = () => {
+      // Khung 0 của nhiều clip là màn hình đen vì fade-in, nhích lên một chút
+      video.currentTime = Math.min(0.1, (video.duration || 1) / 2);
+    };
+
+    video.onseeked = () => {
+      const meta = {
+        width: video.videoWidth,
+        height: video.videoHeight,
+        duration: Math.round(video.duration || 0),
+      };
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return done({ ...meta, poster: null });
+        ctx.drawImage(video, 0, 0);
+        canvas.toBlob((poster) => done({ ...meta, poster }), "image/jpeg", 0.85);
+      } catch {
+        done({ ...meta, poster: null });
+      }
+    };
+  });
+}
+
+/** PUT thẳng một file lên URL đã ký của R2, có báo tiến độ. */
+function putToR2(url: string, file: File, onProgress: (percent: number) => void): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    // Content-Type phải khớp đúng giá trị đã dùng lúc ký, lệch một ký tự là chữ ký sai
+    xhr.setRequestHeader("Content-Type", file.type);
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new Error("R2 từ chối file (HTTP " + xhr.status + "). Kiểm tra cấu hình CORS của bucket."));
+    };
+    xhr.onerror = () =>
+      reject(new Error("Không gửi được file lên R2. Bucket đã bật CORS cho tên miền này chưa?"));
+
+    xhr.send(file);
+  });
+}
+
 /** Ô chọn file: bấm chọn hoặc kéo thả, tải lên ngay rồi hiện xem trước. */
 function MediaPicker({
   kind,
   value,
   accept,
   hint,
+  r2Enabled = false,
   onUploaded,
   onClear,
 }: {
@@ -143,7 +263,10 @@ function MediaPicker({
   value: Media | null;
   accept: string;
   hint: string;
-  onUploaded: (media: Media, resolutionLabel: string) => void;
+  /** Video sẽ vào R2 nên trần dung lượng cao hơn nhiều so với Cloudinary. */
+  r2Enabled?: boolean;
+  /** Tham số poster chỉ có khi video vào R2: khung hình đầu đã cắt và tải lên sẵn. */
+  onUploaded: (media: Media, resolutionLabel: string, poster?: Media) => void;
   onClear: () => void;
 }) {
   const ref = useRef<HTMLInputElement>(null);
@@ -153,11 +276,12 @@ function MediaPicker({
   const [dragging, setDragging] = useState(false);
 
   /**
-   * File đi thẳng từ trình duyệt lên Cloudinary, không qua máy chủ Next.js.
+   * File đi thẳng từ trình duyệt lên kho lưu, không qua máy chủ Next.js — function
+   * trên Vercel chỉ nhận request body tối đa 4.5MB nên không làm trung gian được.
    *
-   * Đường cũ (POST /api/admin/wallpapers/upload) không sống được trên Vercel:
-   * serverless function chặn request body quá 4.5MB, nên mọi video đều hỏng
-   * dù route khai cho phép tới 100MB. Máy chủ giờ chỉ ký, không ôm file.
+   * Video ưu tiên vào R2 (trần 4GB, băng thông ra miễn phí), ảnh và poster ở lại
+   * Cloudinary vì cần nén và cắt khung hình. Chưa cấu hình R2 thì route ký trả 503
+   * và video lặng lẽ quay về Cloudinary như trước, chỉ là bị chặn ở 100MB.
    */
   async function upload(file: File) {
     const isVideo = file.type.startsWith("video/");
@@ -172,9 +296,10 @@ function MediaPicker({
       setError("Ảnh đại diện phải là file ảnh.");
       return;
     }
-    const limit = limitFor(isVideo);
+
+    const limit = limitFor(isVideo, isVideo && r2Enabled);
     if (file.size > limit.bytes) {
-      setError(`File quá lớn (${formatBytes(file.size)}). Tối đa ${limit.label}.`);
+      setError("File quá lớn (" + formatBytes(file.size) + "). Tối đa " + limit.label + ".");
       return;
     }
 
@@ -183,42 +308,59 @@ function MediaPicker({
     setError("");
 
     try {
-      const signRes = await fetch("/api/admin/wallpapers/upload/sign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resourceType: isVideo ? "video" : "image" }),
-      });
-      if (!signRes.ok) {
-        setError(await errorFrom(signRes, "Không xin được chữ ký tải lên."));
-        return;
+      if (isVideo) {
+        const signRes = await fetch("/api/admin/wallpapers/upload/r2-sign", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileName: file.name, contentType: file.type }),
+        });
+
+        if (signRes.ok) {
+          const { key, uploadUrl, publicUrl } = await signRes.json();
+
+          // Đọc metadata trước khi tải: R2 không trả về kích thước hay thời lượng
+          const probe = await probeVideo(file);
+          await putToR2(uploadUrl, file, setProgress);
+
+          // Poster bắt buộc phải nằm ở Cloudinary — R2 không cắt được khung hình.
+          // Thất bại thì vẫn lưu được, admin chỉ cần tự tải ảnh đại diện.
+          let poster: Media | undefined;
+          if (probe.poster) {
+            try {
+              poster = (await cloudinaryUpload(probe.poster, false, () => {})).media;
+            } catch (e) {
+              console.error("Không tải được poster tự cắt:", e);
+            }
+          }
+
+          onUploaded(
+            {
+              url: publicUrl,
+              publicId: key,
+              resourceType: "video",
+              width: probe.width || undefined,
+              height: probe.height || undefined,
+              format: file.name.split(".").pop()?.toLowerCase(),
+              bytes: file.size,
+              duration: probe.duration || undefined,
+              alt: "",
+              provider: "r2",
+            },
+            resolutionLabelFor(probe.width, probe.height),
+            poster
+          );
+          return;
+        }
+
+        // 503 nghĩa là chưa cấu hình R2 -> rơi xuống dùng Cloudinary bên dưới
+        if (signRes.status !== 503) {
+          setError(await errorFrom(signRes, "Không chuẩn bị được chỗ lưu video."));
+          return;
+        }
       }
-      const { cloudName, apiKey, resourceType, params } = await signRes.json();
 
-      const body = new FormData();
-      body.append("file", file);
-      body.append("api_key", apiKey);
-      for (const [key, value] of Object.entries(params)) body.append(key, String(value));
-
-      const result = await uploadToCloudinary(
-        `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`,
-        body,
-        setProgress
-      );
-
-      onUploaded(
-        {
-          url: result.secure_url,
-          publicId: result.public_id,
-          resourceType,
-          width: result.width,
-          height: result.height,
-          format: result.format,
-          bytes: result.bytes,
-          duration: result.duration,
-          alt: "",
-        },
-        resolutionLabelFor(result.width, result.height)
-      );
+      const { media, resolutionLabel } = await cloudinaryUpload(file, isVideo, setProgress);
+      onUploaded(media, resolutionLabel);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Tải lên thất bại.");
     } finally {
@@ -227,6 +369,7 @@ function MediaPicker({
       if (ref.current) ref.current.value = "";
     }
   }
+
 
   return (
     <div className="space-y-2">
@@ -337,16 +480,19 @@ export function WallpaperForm({ initial }: { initial?: WallpaperFormValues }) {
   const [error, setError] = useState("");
   // Slug tự sinh theo tiêu đề cho tới khi admin sửa tay, sau đó thôi ghi đè
   const [slugTouched, setSlugTouched] = useState(isEdit);
+  // Video vào R2 hay Cloudinary quyết định trần dung lượng hiện trong gợi ý
+  const [r2Enabled, setR2Enabled] = useState(false);
   // File đã tải lên Cloudinary trong phiên này nhưng chưa được lưu vào hình nền.
   // Bị thay/gỡ, hoặc rời trang mà không lưu, thì xoá đi để không thành file mồ côi.
-  const pendingRef = useRef(new Map<string, Media["resourceType"]>());
+  // Nhớ cả provider: cùng một publicId phải gọi đúng kho mới xoá được
+  const pendingRef = useRef(new Map<string, Pick<Media, "resourceType" | "provider">>());
   const savedRef = useRef(false);
 
   useEffect(() => {
     const pending = pendingRef.current;
     function discardAll() {
       if (savedRef.current) return;
-      for (const [publicId, type] of pending) discardUpload(publicId, type);
+      for (const [publicId, at] of pending) discardUpload(publicId, at.resourceType, at.provider);
       pending.clear();
     }
     window.addEventListener("pagehide", discardAll);
@@ -357,17 +503,27 @@ export function WallpaperForm({ initial }: { initial?: WallpaperFormValues }) {
   }, []);
 
   function track(media: Media) {
-    pendingRef.current.set(media.publicId, media.resourceType);
+    pendingRef.current.set(media.publicId, {
+      resourceType: media.resourceType,
+      provider: media.provider,
+    });
   }
 
-  /** Bỏ một file: chỉ xoá trên Cloudinary nếu đó là file mới tải, chưa lưu. */
+  /** Bỏ một file: chỉ xoá khỏi kho nếu đó là file mới tải, chưa lưu. */
   function discard(media: Media | null) {
     if (!media) return;
-    const type = pendingRef.current.get(media.publicId);
-    if (!type) return;
+    const at = pendingRef.current.get(media.publicId);
+    if (!at) return;
     pendingRef.current.delete(media.publicId);
-    discardUpload(media.publicId, type);
+    discardUpload(media.publicId, at.resourceType, at.provider);
   }
+
+  useEffect(() => {
+    fetch("/api/admin/wallpapers/upload/r2-sign")
+      .then((res) => (res.ok ? res.json() : { enabled: false }))
+      .then((data) => setR2Enabled(Boolean(data.enabled)))
+      .catch(() => setR2Enabled(false));
+  }, []);
 
   useEffect(() => {
     fetch("/api/admin/categories?limit=100")
@@ -456,15 +612,22 @@ export function WallpaperForm({ initial }: { initial?: WallpaperFormValues }) {
           hint={
             // Lấy trần từ chính hằng số dùng để kiểm tra, để text và luật không lệch nhau
             values.mediaType === "video"
-              ? `MP4 hoặc WEBM, tối đa ${limitFor(true).label}. Kéo thả vào đây cũng được.`
+              ? `MP4 hoặc WEBM, tối đa ${limitFor(true, r2Enabled).label}${
+                  r2Enabled ? " (lưu trên R2)" : ""
+                }. Kéo thả vào đây cũng được.`
               : `JPG, PNG hoặc WEBP, tối đa ${limitFor(false).label}. Kéo thả vào đây cũng được.`
           }
-          onUploaded={(media, resolutionLabel) => {
+          r2Enabled={r2Enabled}
+          onUploaded={(media, resolutionLabel, poster) => {
             discard(values.media);
             track(media);
+            // Video trên R2 không cắt được khung hình khi phát, nên poster đã được
+            // cắt sẵn ở trình duyệt được đặt luôn làm ảnh đại diện. Admin vẫn đổi được.
+            if (poster) track(poster);
             setValues((v) => ({
               ...v,
               media,
+              thumbnail: poster ?? v.thumbnail,
               resolutionLabel: v.resolutionLabel || resolutionLabel,
               // Ảnh dọc là hình nền điện thoại, ảnh ngang là máy tính — đoán sẵn
               // cho admin, vẫn đổi lại được bên dưới

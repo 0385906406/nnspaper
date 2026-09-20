@@ -1,13 +1,13 @@
 import { auth } from "@/auth";
 import { hasPermission } from "@/lib/admin";
-import { destroyUnusedAsset } from "@/lib/cloudinary-assets";
+import { destroyUnusedStoredAsset } from "@/lib/media-assets";
 import { connectDB } from "@/lib/mongodb";
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
 /**
- * DELETE /api/admin/wallpapers/upload?publicId=&type=image|video — huỷ file vừa tải
+ * DELETE /api/admin/wallpapers/upload?publicId=&type=image|video&provider=cloudinary|r2 — huỷ file vừa tải
  * lên nhưng không được lưu (admin đổi file khác, bấm Huỷ hoặc rời trang). Chỉ xoá
  * file trong thư mục hình nền mà chưa hình nền nào dùng.
  */
@@ -23,10 +23,11 @@ export async function DELETE(req: NextRequest) {
 
     const publicId = req.nextUrl.searchParams.get("publicId") ?? "";
     const type = req.nextUrl.searchParams.get("type") === "video" ? "video" : "image";
+    const provider = req.nextUrl.searchParams.get("provider") === "r2" ? "r2" : "cloudinary";
     if (!publicId) return NextResponse.json({ error: "Thiếu publicId." }, { status: 400 });
 
     await connectDB();
-    const removed = await destroyUnusedAsset(publicId, type);
+    const removed = await destroyUnusedStoredAsset({ publicId, resourceType: type, provider });
     return NextResponse.json({ removed });
   } catch (error) {
     console.error("Discard upload error:", error);

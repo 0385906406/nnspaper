@@ -19,6 +19,9 @@ const MediaSchema = new Schema(
     format: String,
     bytes: Number,
     duration: Number, // chỉ có với video
+    // Nơi file thực sự nằm. Bản ghi cũ không có trường này nên mặc định là
+    // cloudinary — đúng với mọi file đã tải lên trước khi tách video sang R2.
+    provider: { type: String, enum: ["cloudinary", "r2"], default: "cloudinary" },
     // alt rất quan trọng cho SEO ảnh và cho trình đọc màn hình
     alt: { type: String, default: "" },
   },
