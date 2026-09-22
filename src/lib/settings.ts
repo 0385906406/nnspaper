@@ -1,4 +1,5 @@
 import "server-only";
+import type { Metadata } from "next";
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { withDb } from "@/lib/data-source";
@@ -224,8 +225,33 @@ export { DEFAULTS as DEFAULT_SETTING_VALUES };
  * xoá sạch thiết lập của layout gốc. Vì vậy mọi trang công khai phải lấy giá trị
  * qua đây, nếu không bật bảo trì mà trang vẫn báo "index" với công cụ tìm kiếm.
  */
-export async function robotsFor(noindex = false): Promise<{ index: boolean; follow: boolean }> {
+/**
+ * Chỉ thị cho riêng Googlebot.
+ *
+ * Mặc định Google chỉ lấy đoạn trích ngắn và ảnh xem trước cỡ nhỏ. Một trang hình
+ * nền sống bằng ảnh xem trước lớn trong kết quả tìm kiếm, Google Images và
+ * Discover, nên phải xin rõ "large".
+ *
+ * Phải nằm trong chính robotsFor chứ không chỉ khai ở layout gốc: metadata của
+ * trang con GHI ĐÈ trọn khoá `robots` của layout, nên mọi trang tự đặt robots
+ * (gần như tất cả trang nội dung) sẽ mất sạch các chỉ thị này.
+ */
+const GOOGLE_BOT_DIRECTIVES = {
+  "max-snippet": -1,
+  "max-image-preview": "large",
+  "max-video-preview": -1,
+} as const;
+
+type Robots = NonNullable<Metadata["robots"]>;
+
+export async function robotsFor(noindex = false): Promise<Robots> {
   const { maintenance_mode } = await getSettings();
-  if (maintenance_mode) return { index: false, follow: false };
-  return { index: !noindex, follow: true };
+  if (maintenance_mode || noindex) {
+    return { index: false, follow: true, googleBot: { index: false, follow: true } };
+  }
+  return {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true, ...GOOGLE_BOT_DIRECTIVES },
+  };
 }

@@ -20,6 +20,7 @@ import { getComments } from "@/lib/comments";
 import { getCurrentUser, hasPermission } from "@/lib/admin";
 import { auth } from "@/auth";
 import { absoluteUrl } from "@/lib/site";
+import { breadcrumbJsonLd, JsonLd, ORGANIZATION_ID } from "@/lib/seo";
 import { getSettings, robotsFor } from "@/lib/settings";
 import { formatCount } from "@/lib/format";
 import { coverOf } from "@/lib/cover";
@@ -100,34 +101,43 @@ export default async function WallpaperDetailPage({
   const belowItems = related.slice(SIDE_COUNT);
 
   const cover = coverOf(wallpaper);
+  const pageUrl = absoluteUrl(`/hinh-nen/${wallpaper.slug}`);
+  const isVideo = wallpaper.mediaType === "video";
+
   const jsonLd = [
+    breadcrumbJsonLd([
+      { name: "Trang chủ", path: "/" },
+      { name: wallpaper.categoryName, path: `/danh-muc/${wallpaper.categorySlug}` },
+      { name: wallpaper.title },
+    ]),
     {
       "@context": "https://schema.org",
-      "@type": "BreadcrumbList",
-      itemListElement: [
-        { "@type": "ListItem", position: 1, name: "Trang chủ", item: absoluteUrl("/") },
-        {
-          "@type": "ListItem",
-          position: 2,
-          name: wallpaper.categoryName,
-          item: absoluteUrl(`/danh-muc/${wallpaper.categorySlug}`),
-        },
-        {
-          "@type": "ListItem",
-          position: 3,
-          name: wallpaper.title,
-          item: absoluteUrl(`/hinh-nen/${wallpaper.slug}`),
-        },
-      ],
-    },
-    {
-      "@context": "https://schema.org",
-      "@type": wallpaper.mediaType === "video" ? "VideoObject" : "ImageObject",
+      "@type": isVideo ? "VideoObject" : "ImageObject",
+      "@id": `${pageUrl}#media`,
       name: wallpaper.title,
       description: wallpaper.description || wallpaper.title,
       contentUrl: wallpaper.media.url,
       thumbnailUrl: cover.url,
       uploadDate: wallpaper.publishedAt ?? wallpaper.updatedAt,
+      // Buộc schema về đúng trang chi tiết: không có khoá này, Google Images có
+      // thể dẫn thẳng người xem tới file trên CDN và trang mất lượt truy cập.
+      mainEntityOfPage: pageUrl,
+      // Dữ liệu cấp phép — điều kiện để ảnh được gắn nhãn "Licensable" trong
+      // Google Images, kèm liên kết về trang điều khoản sử dụng.
+      license: absoluteUrl("/dieu-khoan-su-dung"),
+      acquireLicensePage: pageUrl,
+      creator: { "@id": ORGANIZATION_ID },
+      ...(wallpaper.source ? { creditText: wallpaper.source } : {}),
+      ...(wallpaper.tags.length ? { keywords: wallpaper.tags.join(", ") } : {}),
+      ...(isVideo
+        ? {}
+        : {
+            // width/height chỉ hợp lệ cho ImageObject. VideoObject mô tả kích
+            // thước qua thumbnail, khai ở đây là sai schema.
+            ...(wallpaper.media.width ? { width: wallpaper.media.width } : {}),
+            ...(wallpaper.media.height ? { height: wallpaper.media.height } : {}),
+            representativeOfPage: true,
+          }),
       interactionStatistic: [
         {
           "@type": "InteractionCounter",
@@ -139,13 +149,18 @@ export default async function WallpaperDetailPage({
           interactionType: "https://schema.org/CommentAction",
           userInteractionCount: wallpaper.commentCount,
         },
+        {
+          "@type": "InteractionCounter",
+          interactionType: "https://schema.org/WatchAction",
+          userInteractionCount: wallpaper.views,
+        },
       ],
     },
   ];
 
   return (
     <AppShell>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <JsonLd data={jsonLd} />
 
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] 2xl:grid-cols-[minmax(0,6fr)_minmax(0,5fr)]">
         <div className="min-w-0 space-y-8">

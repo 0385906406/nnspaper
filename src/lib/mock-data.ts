@@ -362,10 +362,26 @@ export function getMockRelatedWallpapers(
     .slice(0, limit);
 }
 
-export function getMockWallpapersForSitemap(): { slug: string; updatedAt: Date }[] {
+export function getMockWallpapersForSitemap(): {
+  slug: string;
+  title: string;
+  description: string;
+  updatedAt: Date;
+  mediaUrl: string;
+  thumbnailUrl: string | null;
+  mediaType: "image" | "video";
+}[] {
   return mockWallpapers
     .filter((w) => w.status === "published")
-    .map((w) => ({ slug: w.slug, updatedAt: new Date(w.updatedAt) }));
+    .map((w) => ({
+      slug: w.slug,
+      title: w.title,
+      description: w.description ?? "",
+      updatedAt: new Date(w.updatedAt),
+      mediaUrl: w.media.url,
+      thumbnailUrl: w.thumbnail?.url ?? null,
+      mediaType: w.mediaType,
+    }));
 }
 
 export function incrementMockViews(wallpaperSlug: string): void {

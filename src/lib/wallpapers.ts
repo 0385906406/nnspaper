@@ -388,7 +388,16 @@ export const getRelatedWallpapers = cache(
   }
 );
 
-/** Danh sách rút gọn cho sitemap: chỉ cần slug và ngày cập nhật. */
+export type SitemapWallpaper = {
+  slug: string;
+  title: string;
+  description: string;
+  updatedAt: Date;
+  mediaUrl: string;
+  thumbnailUrl: string | null;
+  mediaType: "image" | "video";
+};
+
 /**
  * Slug của những danh mục thực sự có hình nền đã xuất bản.
  *
@@ -407,19 +416,48 @@ export const getCategorySlugsWithContent = cache(async (): Promise<Set<string>> 
   );
 });
 
-export async function getWallpapersForSitemap(): Promise<
-  { slug: string; updatedAt: Date }[]
-> {
+/**
+ * Trần số URL cho một file sitemap, theo đúng giới hạn của giao thức sitemap
+ * (50.000 URL mỗi file). Ảnh cũ hơn mốc này sẽ rơi khỏi sitemap mà không báo gì,
+ * nên khi kho ảnh chạm ngưỡng thì phải tách sitemap bằng generateSitemaps.
+ */
+export const SITEMAP_URL_LIMIT = 50000;
+
+export async function getWallpapersForSitemap(): Promise<SitemapWallpaper[]> {
   return withDb(async () => {
     const docs = await Wallpaper.find({ status: "published" })
-      .select({ slug: 1, updatedAt: 1 })
+      .select({
+        slug: 1,
+        title: 1,
+        description: 1,
+        updatedAt: 1,
+        mediaType: 1,
+        "media.url": 1,
+        "thumbnail.url": 1,
+      })
       .sort({ updatedAt: -1 })
-      .limit(5000)
+      .limit(SITEMAP_URL_LIMIT)
       .lean();
 
     return docs.map((d) => {
-      const doc = d as unknown as { slug: string; updatedAt: Date };
-      return { slug: doc.slug, updatedAt: doc.updatedAt };
+      const doc = d as unknown as {
+        slug: string;
+        title?: string;
+        description?: string;
+        updatedAt: Date;
+        mediaType: "image" | "video";
+        media?: { url?: string };
+        thumbnail?: { url?: string } | null;
+      };
+      return {
+        slug: doc.slug,
+        title: doc.title ?? doc.slug,
+        description: doc.description ?? "",
+        updatedAt: doc.updatedAt,
+        mediaUrl: doc.media?.url ?? "",
+        thumbnailUrl: doc.thumbnail?.url ?? null,
+        mediaType: doc.mediaType,
+      };
     });
   }, () => getMockWallpapersForSitemap());
 }

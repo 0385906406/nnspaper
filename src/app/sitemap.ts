@@ -1,7 +1,11 @@
 import type { MetadataRoute } from "next";
 import { absoluteUrl } from "@/lib/site";
 import { getCategories } from "@/lib/categories";
-import { getCategorySlugsWithContent, getWallpapersForSitemap } from "@/lib/wallpapers";
+import {
+  getCategorySlugsWithContent,
+  getWallpapersForSitemap,
+  SITEMAP_URL_LIMIT,
+} from "@/lib/wallpapers";
 
 // Danh mục/hình nền thay đổi thường xuyên và cần kết nối DB — không thể build tĩnh lúc build time.
 export const dynamic = "force-dynamic";
@@ -48,15 +52,23 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       (childrenOf.get(category.id) ?? []).some((slug) => slugsWithContent.has(slug))
   );
 
-  return [
-    { url: absoluteUrl("/"), changeFrequency: "daily", priority: 1 },
+  // getWallpapersForSitemap sắp xếp theo updatedAt giảm dần, nên phần tử đầu là
+  // lần cập nhật gần nhất của cả kho. Trang chủ và các trang danh sách đều đổi
+  // nội dung mỗi khi có ảnh mới, nên dùng chung mốc này làm <lastmod>. Thiếu
+  // <lastmod>, Google phải tự đoán tần suất và thường bò lại chậm hơn nhiều.
+  const latestUpdate = wallpapers[0]?.updatedAt ?? new Date();
+
+  const entries: MetadataRoute.Sitemap = [
+    { url: absoluteUrl("/"), lastModified: latestUpdate, changeFrequency: "daily", priority: 1 },
     ...LISTING_PAGES.map((page) => ({
       url: absoluteUrl(page.path),
+      lastModified: latestUpdate,
       changeFrequency: "daily" as const,
       priority: page.priority,
     })),
     ...publishableCategories.map((category) => ({
       url: absoluteUrl(`/danh-muc/${category.slug}`),
+      lastModified: latestUpdate,
       changeFrequency: "daily" as const,
       priority: 0.8,
     })),
@@ -65,11 +77,34 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "monthly" as const,
       priority: page.priority,
     })),
-    ...wallpapers.map((wallpaper) => ({
-      url: absoluteUrl(`/hinh-nen/${wallpaper.slug}`),
-      lastModified: wallpaper.updatedAt,
-      changeFrequency: "weekly" as const,
-      priority: 0.6,
-    })),
+    ...wallpapers.map((wallpaper) => {
+      const cover = wallpaper.mediaType === "video" ? wallpaper.thumbnailUrl : wallpaper.mediaUrl;
+
+      return {
+        url: absoluteUrl(`/hinh-nen/${wallpaper.slug}`),
+        lastModified: wallpaper.updatedAt,
+        changeFrequency: "weekly" as const,
+        priority: 0.6,
+        images: cover ? [cover] : undefined,
+        // Video sitemap: đây là cách duy nhất để video nền lọt vào tab Video của
+        // Google. title/thumbnail_loc/description đều là trường bắt buộc, thiếu
+        // một trường là Google bỏ qua cả mục.
+        ...(wallpaper.mediaType === "video" && cover
+          ? {
+              videos: [
+                {
+                  title: wallpaper.title,
+                  thumbnail_loc: cover,
+                  description: wallpaper.description || wallpaper.title,
+                  content_loc: wallpaper.mediaUrl || undefined,
+                  player_loc: absoluteUrl(`/hinh-nen/${wallpaper.slug}`),
+                },
+              ],
+            }
+          : {}),
+      };
+    }),
   ];
+
+  return entries.slice(0, SITEMAP_URL_LIMIT);
 }
