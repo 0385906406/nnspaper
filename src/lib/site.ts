@@ -38,7 +38,7 @@ export const siteConfig = {
   twitter: "@nnspaper",
   contactEmail: "hello@your-domain.com",
   author: {
-    name: "Viet Duong",
+    name: "Nguyễn Đình Ngọc Sơn",
     url: SITE_URL,
   },
   keywords: [

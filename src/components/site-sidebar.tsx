@@ -8,6 +8,7 @@ import { Mascot } from "page-mascot";
 import { MascotPickerDialog } from "@/components/mascot-picker";
 import { NO_MASCOT, mascotName, mascotSheets } from "@/lib/mascots";
 import { SiteLogo } from "@/components/site-logo";
+import { Copyright } from "@/components/site-footer";
 import {
   CloseIcon,
   FlameIcon,
@@ -315,7 +316,7 @@ function InfoPanel({ onNavigate, siteName }: { onNavigate: () => void; siteName:
         </Link>
       ))}
       <p className="px-3 pt-4 text-xs text-muted">
-        © {new Date().getFullYear()} {siteName}. Đã lưu giữ mọi quyền.
+        <Copyright siteName={siteName} />
       </p>
     </div>
   );
