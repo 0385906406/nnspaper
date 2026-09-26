@@ -43,7 +43,7 @@ export async function AppShell({ searchQuery, children }: Props) {
         mascot={mascot}
       />
 
-      <div className="flex min-h-dvh flex-col pb-20 lg:pb-0 lg:pl-[72px]">
+      <div className="flex min-h-dvh flex-col pb-20 short:pb-14 lg:pb-0 lg:pl-[72px]">
         {settings.maintenance_mode && (
           <p className="bg-yellow-500/15 px-4 py-2 text-center text-xs font-medium text-yellow-500">
             Đang bật chế độ bảo trì — khách truy cập không xem được trang này.

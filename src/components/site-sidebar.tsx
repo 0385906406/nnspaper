@@ -434,7 +434,7 @@ export function SiteSidebar({
       {/* Mobile: thanh tab dưới đáy */}
       <nav
         aria-label="Điều hướng chính"
-        className="fixed inset-x-0 bottom-0 z-40 flex items-center justify-around border-t border-border bg-background/95 px-2 pt-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom,0px))] backdrop-blur lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 flex items-center justify-around border-t border-border bg-background/95 px-2 pt-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom,0px))] backdrop-blur short:pt-1 short:pb-[calc(0.25rem+env(safe-area-inset-bottom,0px))] lg:hidden"
       >
         {[
           { href: "/", label: "Trang chủ", icon: HomeIcon, exact: true },
@@ -483,7 +483,7 @@ function MobileTab({
       <span className={`flex h-8 w-11 items-center justify-center rounded-full ${active ? "bg-surface-2" : ""}`}>
         {children}
       </span>
-      {label}
+      <span className="short:hidden">{label}</span>
     </>
   );
 

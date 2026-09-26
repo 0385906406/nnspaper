@@ -27,7 +27,7 @@ export function SiteHeader({
     // phần tử fixed, làm màn hình tìm kiếm toàn màn hình trên mobile bị kẹt trong header
     // z-40 (ngang thanh tab mobile, đứng sau trong DOM nên nằm trên) để màn hình
     // tìm kiếm toàn màn hình không bị thanh tab dưới đáy đè lên
-    <header className="sticky top-0 z-40 bg-background">
+    <header className="sticky top-0 z-40 bg-background short:static">
       <div className="flex items-center gap-2 px-3 py-3 sm:gap-3 sm:px-4 lg:px-6">
         {/* Desktop đã có logo ở thanh dọc */}
         <Link href="/" aria-label={siteName} className="group shrink-0 lg:hidden">

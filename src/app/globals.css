@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* Màn hình thấp — thực tế là điện thoại xoay ngang (cao ~360–430px). Ở đây header
+   không dính, thanh tab gọn lại và trang chi tiết xếp ảnh cạnh thông tin. */
+@custom-variant short (@media (max-height: 500px));
+
 :root {
   --background: #0a0a0d;
   --surface: #17171c;

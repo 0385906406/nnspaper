@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import Image from "next/image";
 import Link from "next/link";
 import type { WallpaperView } from "@/lib/wallpapers";
@@ -29,7 +30,7 @@ export function PinMedia({ wallpaper, backHref }: { wallpaper: WallpaperView; ba
   const content =
     wallpaper.mediaType === "video" ? (
       <video
-        className="max-h-[calc(100dvh-140px)] w-full object-contain"
+        className="max-h-[calc(100dvh-220px)] md:max-h-[calc(100dvh-140px)] short:max-h-[calc(100dvh-64px)] w-full object-contain"
         src={videoSrc(media.url)}
         poster={coverOf(wallpaper).url}
         autoPlay
@@ -45,7 +46,7 @@ export function PinMedia({ wallpaper, backHref }: { wallpaper: WallpaperView; ba
         width={media.width || 1080}
         height={media.height || 1920}
         sizes="(min-width: 1280px) 30vw, (min-width: 768px) 50vw, 100vw"
-        className="h-auto max-h-[calc(100dvh-140px)] w-full object-contain"
+        className="h-auto max-h-[calc(100dvh-220px)] md:max-h-[calc(100dvh-140px)] short:max-h-[calc(100dvh-64px)] w-full object-contain"
         priority
       />
     );
@@ -71,31 +72,35 @@ export function PinMedia({ wallpaper, backHref }: { wallpaper: WallpaperView; ba
         <ExpandIcon className="h-5 w-5" />
       </button>
 
-      {zoomed && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label={alt}
-          onClick={() => setZoomed(false)}
-          className="animate-fade-in fixed inset-0 z-[60] flex items-center justify-center bg-black/95 p-4"
-        >
-          <button
-            type="button"
+      {/* Gắn thẳng vào body: khung <article> có transform (animate-fade-in-up) nên
+          lớp fixed nằm bên trong sẽ bám theo khung đó và bị cắt, không phủ đúng màn hình. */}
+      {zoomed &&
+        createPortal(
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={alt}
             onClick={() => setZoomed(false)}
-            aria-label="Đóng"
-            className="absolute top-4 right-4 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+            className="animate-fade-in fixed inset-0 z-[60] flex items-center justify-center bg-black/95 p-4"
           >
-            <CloseIcon className="h-5 w-5" />
-          </button>
-          {wallpaper.mediaType === "video" ? (
-            <video src={videoSrc(media.url)} className="max-h-full max-w-full" autoPlay loop controls playsInline />
-          ) : (
-            // Ảnh gốc Cloudinary có thể không nằm trong danh sách kích thước của next/image
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={media.url} alt={alt} className="max-h-full max-w-full object-contain" />
-          )}
-        </div>
-      )}
+            <button
+              type="button"
+              onClick={() => setZoomed(false)}
+              aria-label="Đóng"
+              className="absolute top-4 right-4 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+            >
+              <CloseIcon className="h-5 w-5" />
+            </button>
+            {wallpaper.mediaType === "video" ? (
+              <video src={videoSrc(media.url)} className="max-h-full max-w-full" autoPlay loop controls playsInline />
+            ) : (
+              // Ảnh gốc Cloudinary có thể không nằm trong danh sách kích thước của next/image
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={media.url} alt={alt} className="max-h-full max-w-full object-contain" />
+            )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

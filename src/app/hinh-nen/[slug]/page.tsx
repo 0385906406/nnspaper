@@ -165,10 +165,10 @@ export default async function WallpaperDetailPage({
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] 2xl:grid-cols-[minmax(0,6fr)_minmax(0,5fr)]">
         <div className="min-w-0 space-y-8">
           {/* Khung chi tiết: ảnh bên trái, thông tin + nhận xét bên phải */}
-          <article className="animate-fade-in-up overflow-hidden rounded-[32px] border border-border bg-surface md:grid md:grid-cols-2">
+          <article className="animate-fade-in-up overflow-hidden rounded-[32px] border border-border bg-surface md:grid md:grid-cols-2 short:grid short:grid-cols-2">
             <PinMedia wallpaper={wallpaper} backHref={`/danh-muc/${wallpaper.categorySlug}`} />
 
-            <div className="flex flex-col md:max-h-[calc(100dvh-100px)] md:min-h-[520px]">
+            <div className="flex flex-col md:max-h-[calc(100dvh-100px)] md:min-h-[520px] short:max-h-[calc(100dvh-64px)] short:min-h-0">
               <div className="flex items-center gap-0.5 px-3 pt-3 pb-2 sm:px-4">
                 <HeartButton
                   slug={wallpaper.slug}
