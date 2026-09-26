@@ -92,7 +92,16 @@ export function PinMedia({ wallpaper, backHref }: { wallpaper: WallpaperView; ba
               <CloseIcon className="h-5 w-5" />
             </button>
             {wallpaper.mediaType === "video" ? (
-              <video src={videoSrc(media.url)} className="max-h-full max-w-full" autoPlay loop controls playsInline />
+              // Chặn click lan ra lớp nền: chạm Play/tua/âm lượng không được đóng khung xem
+              <video
+                src={videoSrc(media.url)}
+                className="max-h-full max-w-full"
+                autoPlay
+                loop
+                controls
+                playsInline
+                onClick={(e) => e.stopPropagation()}
+              />
             ) : (
               // Ảnh gốc Cloudinary có thể không nằm trong danh sách kích thước của next/image
               // eslint-disable-next-line @next/next/no-img-element
